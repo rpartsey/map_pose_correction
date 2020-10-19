@@ -1,66 +1,40 @@
+import os
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
+
+from data import EgoviewsDataset, DataLoader
+from model import PoseCorrectionNet
 
 
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(2, 32, 3, 1)
-        self.bn1 =  nn.BatchNorm2d(32)
-        self.max_pool1 = nn.MaxPool2d(3, 2)
-    
-        self.conv2 = nn.Conv2d(32 + 2*2, 64, 3, 1)
-        self.bn2 =  nn.BatchNorm2d(64)
-        self.max_pool2 = nn.MaxPool2d(3, 2)
-
-        self.conv3 = nn.Conv2d(64, 64, 3, 1)
-        self.bn3 =  nn.BatchNorm2d(64)
-        self.max_pool3 = nn.MaxPool2d(3, 2)
-        
-        self.conv4 = nn.Conv2d(64, 128, 3, 1)
-        self.bn4 =  nn.BatchNorm2d(128)
-        self.adaptive_max_pool = nn.AdaptiveMaxPool2d((1, 1))
-        
-        self.conv5 = nn.Conv2d(128, 3, 1, 1)
-
-
-    def forward(self, egoview, egomap):
-        
-        x = self.conv1(egomap)
-        x = self.bn1(x)
-        x = F.relu(x)
-        x = self.max_pool1(x)
-        
-        x = torch.cat([x, egoview, F.interpolate(egomap, egoview.shape[2:])], 1)
-        
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = F.relu(x)
-        x = self.max_pool2(x)
-        
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = F.relu(x)
-        x = self.max_pool3(x)
-        
-        x = self.conv4(x)
-        x = self.bn4(x)
-        x = F.relu(x)
-        x = self.adaptive_max_pool(x)
-        
-        x = self.conv5(x)
-        
-        return x
-        
-          
+preprocessed_data_dir = '/datasets/extra_space2/rpartsey/3d-navigation/habitat/data/map_pose_correction/preprocessed_data'
+train_data_dir = os.path.join(preprocessed_data_dir, 'train')
 device = 'cuda:2'
+batch_size = 16
 
-xview = torch.rand(16, 2, 65, 65).to(device)
-xmap = torch.rand(16, 2, 133, 133).to(device)
 
-model = Net()
+dataset = EgoviewsDataset(
+    observed_egoviews_path=os.path.join(train_data_dir, 'observed_egoviews.npy'),
+    expected_egoviews_path=os.path.join(train_data_dir, 'expected_egoviews.npy'),
+    pose_errors_path=os.path.join(train_data_dir, 'pose_errors.npy')
+)
+
+loader = DataLoader(
+    dataset=dataset,
+    batch_size=batch_size
+)
+
+for batch in loader:
+    observed_egoviews, expected_egoviews, pose_errors = batch
+
+    observed_egoviews = observed_egoviews.to(device)
+    expected_egoviews = expected_egoviews.to(device)
+    pose_errors = pose_errors.to(device)
+    break
+
+model = PoseCorrectionNet()
 model.to(device)
 
-print(model(xview, xmap).shape)
+prediction = model(observed_egoviews, expected_egoviews)
+
+diff = prediction - pose_errors
+print(diff.shape)
+print(diff)
