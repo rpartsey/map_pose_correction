@@ -27,26 +27,32 @@ class PoseCorrectionNet(nn.Module):
     def forward(self, egoview, egomap):
         x = self.conv1(egomap)
         x = self.bn1(x)
-        x = F.relu(x)
+        x = torch.relu(x)
         x = self.max_pool1(x)
 
         x = torch.cat([x, egoview, F.interpolate(egomap, egoview.shape[2:])], 1)
 
         x = self.conv2(x)
         x = self.bn2(x)
-        x = F.relu(x)
+        x = torch.relu(x)
         x = self.max_pool2(x)
 
         x = self.conv3(x)
         x = self.bn3(x)
-        x = F.relu(x)
+        x = torch.relu(x)
         x = self.max_pool3(x)
 
         x = self.conv4(x)
         x = self.bn4(x)
-        x = F.relu(x)
+        x = torch.relu(x)
         x = self.adaptive_max_pool(x)
 
         x = self.conv5(x)
+        x = torch.sigmoid(x)
+
+        origin = torch.full_like(x, fill_value=0.5)
+        origin[:, 2, :, :] = 0
+
+        x = x - origin
 
         return x

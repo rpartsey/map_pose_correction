@@ -1,13 +1,14 @@
+import os
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader  # noqa
 
 
 class EgoviewsDataset(Dataset):
-    def __init__(self, observed_egoviews_path, expected_egoviews_path, pose_errors_path):
-        self.observed_egoviews = np.load(observed_egoviews_path)
-        self.expected_egoviews = np.load(expected_egoviews_path)
-        self.pose_errors = np.load(pose_errors_path)
+    def __init__(self, data_path):
+        self.observed_egoviews = np.load(os.path.join(data_path, 'observed_egoviews.npy'))
+        self.expected_egoviews = np.load(os.path.join(data_path, 'expected_egoviews.npy'))
+        self.pose_errors = np.load(os.path.join(data_path, 'pose_errors.npy'))
 
     def __getitem__(self, idx):
         observed_egoview = self.observed_egoviews[idx]
@@ -18,7 +19,7 @@ class EgoviewsDataset(Dataset):
         expected_egoview = torch.from_numpy(expected_egoview)
         pose_error = torch.from_numpy(pose_error)
 
-        return observed_egoview, expected_egoview, pose_error
+        return (observed_egoview, expected_egoview), pose_error
 
     def __len__(self):
         return self.observed_egoviews.shape[0]
