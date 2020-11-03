@@ -48,11 +48,14 @@ class PoseCorrectionNet(nn.Module):
         x = self.adaptive_max_pool(x)
 
         x = self.conv5(x)
-        x = torch.sigmoid(x)
 
-        origin = torch.full_like(x, fill_value=0.5)
-        origin[:, 2, :, :] = 0
+        location = x[:, :2, :, :]
+        orientation = x[:, 2:, :, :]
 
-        x = x - origin
+        location = torch.sigmoid(location)
+        origin = torch.full_like(location, fill_value=0.5)
+        location = location - origin
+
+        x = torch.cat((location, orientation), dim=1)
 
         return x
