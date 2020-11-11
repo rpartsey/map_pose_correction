@@ -1,59 +1,18 @@
 import os
-import shutil
-import yaml
-from types import SimpleNamespace
-import torch
-import numpy as np
-import random
 
+import torch
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 
+import models
 from data import EgoviewsDataset, DataLoader
-from model import PoseCorrectionNet
 from loss import PoseLoss
+from utils import (
+    EarlyStopping, write_metrics, print_metrics, init_experiment, set_random_seed, load_config
+)
 
 
-def set_random_seed(seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-
-def init_experiment(config):
-    if os.path.exists(config.experiment_dir):
-        def ask():
-            return input(f'Experiment "{config.experiment_name}" already exists. Delete (y/n)?')
-
-        answer = ask()
-        while answer not in ('y', 'n'):
-            answer = ask()
-
-        delete = answer == 'y'
-        if not delete:
-            exit(1)
-
-        shutil.rmtree(config.experiment_dir)
-
-    os.makedirs(config.experiment_dir)
-    shutil.copy(config.self_path, config.save_config_path)
-
-
-def load_config(path):
-    with open(path, 'r') as file:
-        config = SimpleNamespace(**yaml.load(file, Loader=yaml.FullLoader))
-
-        config.experiment_dir = os.path.join(config.log_dir, config.experiment_name)
-        config.tb_dir = os.path.join(config.experiment_dir, 'tb')
-        config.save_model_path = os.path.join(config.experiment_dir, 'model.pt')
-        config.save_config_path = os.path.join(config.experiment_dir, 'config.yaml')
-        config.self_path = path
-
-    return config
-
-
-def train(config, model, optimizer, train_loader, loss_f, device, epoch, writer):
+def train(model, optimizer, train_loader, loss_f, device):
     model.train()
 
     total_weighted_loss = 0
@@ -82,19 +41,16 @@ def train(config, model, optimizer, train_loader, loss_f, device, epoch, writer)
     avg_loc_loss = total_loc_loss / num_batches
     avg_orient_loss = total_orient_loss / num_batches
 
-    print(
-        'Train Epoch: {} \t'
-        'weighted_loss: {:.6f} \t'
-        'location_loss: {:.6f} \t'
-        'orientation_loss: {:.6f}'.format(epoch, avg_weighted_loss, avg_loc_loss, avg_orient_loss)
-    )
+    metrics = {
+        'avg_weighted_loss': avg_weighted_loss,
+        'avg_loc_loss': avg_loc_loss,
+        'avg_orient_loss': avg_orient_loss
+    }
 
-    writer.add_scalar(f'{config.experiment_name}/weighted_loss', avg_weighted_loss, epoch)
-    writer.add_scalar(f'{config.experiment_name}/location_loss', avg_loc_loss, epoch)
-    writer.add_scalar(f'{config.experiment_name}/orientation_loss', avg_orient_loss, epoch)
+    return metrics
 
 
-def val(config, model, val_loader, loss_f, device, epoch, writer):
+def val(model, val_loader, loss_f, device):
     model.eval()
 
     total_weighted_loss = 0
@@ -120,53 +76,57 @@ def val(config, model, val_loader, loss_f, device, epoch, writer):
     avg_loc_loss = total_loc_loss / num_batches
     avg_orient_loss = total_orient_loss / num_batches
 
-    print(
-        'Val set: '
-        'weighted_loss: {:.6f} \t'
-        'location_loss: {:.6f} \t'
-        'orientation_loss: {:.6f}'.format(avg_weighted_loss, avg_loc_loss, avg_orient_loss)
-    )
+    metrics = {
+        'avg_weighted_loss': avg_weighted_loss,
+        'avg_loc_loss': avg_loc_loss,
+        'avg_orient_loss': avg_orient_loss
+    }
 
-    writer.add_scalar(f'{config.experiment_name}/weighted_loss', avg_weighted_loss, epoch)
-    writer.add_scalar(f'{config.experiment_name}/location_loss', avg_loc_loss, epoch)
-    writer.add_scalar(f'{config.experiment_name}/orientation_loss', avg_orient_loss, epoch)
+    return metrics
 
 
-def main():
-    config_path = './config.yaml'
+def main(config_path='./configs/config.yaml'):
     config = load_config(config_path)
 
     init_experiment(config)
     set_random_seed(config.seed)
 
-    train_dataset = EgoviewsDataset(config.train_data_path)
-    train_loader = DataLoader(
-        dataset=train_dataset,
-        batch_size=config.train_batch_size,
-        shuffle=True,
-        num_workers=config.num_workers
-    )
+    train_dataset = EgoviewsDataset(config.data_root, **vars(config.train.dataset.params))
+    train_loader = DataLoader(train_dataset, **vars(config.train.loader.params))
 
-    val_dataset = EgoviewsDataset(config.val_data_path)
-    val_loader = DataLoader(
-        dataset=val_dataset,
-        batch_size=config.val_batch_size,
-        num_workers=config.num_workers
-    )
+    val_dataset = EgoviewsDataset(config.data_root, **vars(config.val.dataset.params))
+    val_loader = DataLoader(val_dataset, **vars(config.val.loader.params))
 
     device = torch.device(config.device)
 
-    model = PoseCorrectionNet().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=config.lr)
+    model_type = getattr(models, config.model.type)
+    model = model_type(**vars(config.model.params)).to(device)
+    optimizer = optim.Adam(model.parameters(), **vars(config.optim.params))
     scheduler = None
-    loss_f = PoseLoss(alpha=1., beta=10.)
+    loss_f = PoseLoss(**vars(config.loss.params))
+    early_stopping = EarlyStopping(
+        save=config.model.save,
+        path=config.model.save_path,
+        **vars(config.stopper.params)
+    )
 
     train_writer = SummaryWriter(log_dir=os.path.join(config.tb_dir, 'train'))
     val_writer = SummaryWriter(log_dir=os.path.join(config.tb_dir, 'val'))
 
     for epoch in range(1, config.epochs + 1):
-        train(config, model, optimizer, train_loader, loss_f, device, epoch, train_writer)
-        val(config, model, val_loader, loss_f, device, epoch, val_writer)
+        print(f'Epoch {epoch}')
+        train_metrics = train(model, optimizer, train_loader, loss_f, device)
+        print_metrics('Train', train_metrics)
+        write_metrics(epoch, train_metrics, train_writer)
+
+        val_metrics = val(model, val_loader, loss_f, device)
+        print_metrics('Val', val_metrics)
+        write_metrics(epoch, val_metrics, val_writer)
+
+        early_stopping(val_metrics['avg_weighted_loss'], model)  # will save the best model to disk
+        if early_stopping.early_stop:
+            print(f'Early stopping after {epoch} epochs.')
+            break
 
         if scheduler:
             scheduler.step()
@@ -174,8 +134,8 @@ def main():
     train_writer.close()
     val_writer.close()
 
-    if config.save_model:
-        torch.save(model.state_dict(), config.save_model_path)
+    if config.model.save:
+        torch.save(model.state_dict(), config.model.save_path.replace('checkpoint', 'last_checkpoint'))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,46 @@
+experiment_name: pcnet_v2_smoke
+data_root: /datasets/extra_space2/rpartsey/3d-navigation/habitat/occupancy_anticipation_navigation/frames
+log_dir: ./experiments
+epochs: 40
+device: cuda:0
+seed: 1
+
+train:
+  dataset:
+    params:
+      csv_path: /datasets/extra_space2/rpartsey/3d-navigation/habitat/occupancy_anticipation_navigation/csvs/train_test_split_no_zero_step/train_dataset.csv
+  loader:
+    params:
+      batch_size: 32
+      num_workers: 4
+      shuffle: True
+
+val:
+  dataset:
+    params:
+      csv_path: /datasets/extra_space2/rpartsey/3d-navigation/habitat/occupancy_anticipation_navigation/csvs/train_test_split_no_zero_step/val_dataset.csv
+  loader:
+    params:
+      batch_size: 32
+      num_workers: 4
+      shuffle: False
+
+model:
+  type: PoseCorrectionNetV2
+  save: True
+  params:
+    cat_interpolated_egoview_projection: True
+
+loss:
+  params:
+    alpha: 1.
+    beta: 10.
+
+optim:
+  params:
+    lr: 0.0001
+
+stopper:
+  params:
+    patience: 7
+    verbose: True
