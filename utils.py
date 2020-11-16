@@ -73,7 +73,9 @@ class RecursiveNamespace(SimpleNamespace):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         for key, val in kwargs.items():
-            if type(val) == dict:
+            if val is None:
+                setattr(self, key, RecursiveNamespace())
+            elif type(val) == dict:
                 setattr(self, key, RecursiveNamespace(**val))
             elif type(val) == list:
                 setattr(self, key, list(map(self.map_entry, val)))

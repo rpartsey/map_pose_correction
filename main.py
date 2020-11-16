@@ -1,14 +1,19 @@
 import os
 
 import torch
-from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 
 import models
-from data import EgoviewsDataset, DataLoader
-from loss import PoseLoss
+import data
+import optims
+import losses
 from utils import (
-    EarlyStopping, write_metrics, print_metrics, init_experiment, set_random_seed, load_config
+    EarlyStopping,
+    write_metrics,
+    print_metrics,
+    init_experiment,
+    set_random_seed,
+    load_config
 )
 
 
@@ -18,14 +23,14 @@ def train(model, optimizer, train_loader, loss_f, device):
     total_weighted_loss = 0
     total_loc_loss = 0
     total_orient_loss = 0
-    for data, target in train_loader:
-        observed_egoview, expected_egoview = data
 
-        observed_egoview = observed_egoview.to(device)
-        expected_egoview = expected_egoview.to(device)
+    for data, target in train_loader:
+        observed_projection, expected_projection = data
+        observed_projection = observed_projection.to(device)
+        expected_projection = expected_projection.to(device)
         target = target.to(device)
 
-        output = model(observed_egoview, expected_egoview)
+        output = model(observed_projection, expected_projection)
         weighted_loss, loc_loss, orient_loss = loss_f(output, target)
 
         optimizer.zero_grad()
@@ -56,15 +61,15 @@ def val(model, val_loader, loss_f, device):
     total_weighted_loss = 0
     total_loc_loss = 0
     total_orient_loss = 0
+
     with torch.no_grad():
         for data, target in val_loader:
-            observed_egoview, expected_egoview = data
-
-            observed_egoview = observed_egoview.to(device)
-            expected_egoview = expected_egoview.to(device)
+            observed_projection, expected_projection = data
+            observed_projection = observed_projection.to(device)
+            expected_projection = expected_projection.to(device)
             target = target.to(device)
 
-            output = model(observed_egoview, expected_egoview)
+            output = model(observed_projection, expected_projection)
             weighted_loss, loc_loss, orient_loss = loss_f(output, target)
 
             total_weighted_loss += weighted_loss.item()
@@ -91,19 +96,18 @@ def main(config_path='./configs/config.yaml'):
     init_experiment(config)
     set_random_seed(config.seed)
 
-    train_dataset = EgoviewsDataset(config.data_root, **vars(config.train.dataset.params))
-    train_loader = DataLoader(train_dataset, **vars(config.train.loader.params))
+    train_dataset = getattr(data, config.train.dataset.type)(config.data_root, **vars(config.train.dataset.params))
+    train_loader = getattr(data, config.train.loader.type)(train_dataset, **vars(config.train.loader.params))
 
-    val_dataset = EgoviewsDataset(config.data_root, **vars(config.val.dataset.params))
-    val_loader = DataLoader(val_dataset, **vars(config.val.loader.params))
+    val_dataset = getattr(data, config.val.dataset.type)(config.data_root, **vars(config.val.dataset.params))
+    val_loader = getattr(data, config.val.loader.type)(val_dataset, **vars(config.val.loader.params))
 
     device = torch.device(config.device)
-
-    model_type = getattr(models, config.model.type)
-    model = model_type(**vars(config.model.params)).to(device)
-    optimizer = optim.Adam(model.parameters(), **vars(config.optim.params))
+    model = getattr(models, config.model.type)(**vars(config.model.params)).to(device)
+    optimizer = getattr(optims, config.optim.type)(model.parameters(), **vars(config.optim.params))
     scheduler = None
-    loss_f = PoseLoss(**vars(config.loss.params))
+    loss_f = getattr(losses, config.loss.type)(**vars(config.loss.params))
+
     early_stopping = EarlyStopping(
         save=config.model.save,
         path=config.model.save_path,
@@ -140,4 +144,3 @@ def main(config_path='./configs/config.yaml'):
 
 if __name__ == '__main__':
     main()
-

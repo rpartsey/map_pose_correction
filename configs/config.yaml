@@ -1,4 +1,4 @@
-experiment_name: pcnet_v2_smoke
+experiment_name: pcnet_smoke
 data_root: /datasets/extra_space2/rpartsey/3d-navigation/habitat/occupancy_anticipation_navigation/frames
 log_dir: ./experiments
 epochs: 40
@@ -7,9 +7,11 @@ seed: 1
 
 train:
   dataset:
+    type: EgoviewsDataset
     params:
       csv_path: /datasets/extra_space2/rpartsey/3d-navigation/habitat/occupancy_anticipation_navigation/csvs/train_test_split_no_zero_step/train_dataset.csv
   loader:
+    type: DataLoader
     params:
       batch_size: 32
       num_workers: 4
@@ -17,9 +19,11 @@ train:
 
 val:
   dataset:
+    type: EgoviewsDataset
     params:
       csv_path: /datasets/extra_space2/rpartsey/3d-navigation/habitat/occupancy_anticipation_navigation/csvs/train_test_split_no_zero_step/val_dataset.csv
   loader:
+    type: DataLoader
     params:
       batch_size: 32
       num_workers: 4
@@ -29,14 +33,15 @@ model:
   type: PoseCorrectionNetV2
   save: True
   params:
-    cat_interpolated_egoview_projection: True
 
 loss:
+  type: PoseLoss
   params:
     alpha: 1.
     beta: 10.
 
 optim:
+  type: Adam
   params:
     lr: 0.0001
 
