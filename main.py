@@ -1,5 +1,5 @@
 import os
-
+from tqdm import tqdm
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
@@ -24,7 +24,7 @@ def train(model, optimizer, train_loader, loss_f, device):
     total_loc_loss = 0
     total_orient_loss = 0
 
-    for data, target in train_loader:
+    for data, target in tqdm(train_loader):
         observed_projection, expected_projection = data
         observed_projection = observed_projection.to(device)
         expected_projection = expected_projection.to(device)
@@ -64,7 +64,7 @@ def val(model, val_loader, loss_f, device):
     total_orient_loss = 0
 
     with torch.no_grad():
-        for data, target in val_loader:
+        for data, target in tqdm(val_loader):
             observed_projection, expected_projection = data
             observed_projection = observed_projection.to(device)
             expected_projection = expected_projection.to(device)
