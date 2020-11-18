@@ -37,14 +37,15 @@ def train(model, optimizer, train_loader, loss_f, device):
         weighted_loss.backward()
         optimizer.step()
 
-        total_weighted_loss += weighted_loss.item()
-        total_loc_loss += loc_loss.item()
-        total_orient_loss += orient_loss.item()
+        batch_size = target.shape[0]
+        total_weighted_loss += weighted_loss.item() * batch_size
+        total_loc_loss += loc_loss.item() * batch_size
+        total_orient_loss += orient_loss.item() * batch_size
 
-    num_batches = len(train_loader)
-    avg_weighted_loss = total_weighted_loss / num_batches
-    avg_loc_loss = total_loc_loss / num_batches
-    avg_orient_loss = total_orient_loss / num_batches
+    dataset_length = len(train_loader.dataset)
+    avg_weighted_loss = total_weighted_loss / dataset_length
+    avg_loc_loss = total_loc_loss / dataset_length
+    avg_orient_loss = total_orient_loss / dataset_length
 
     metrics = {
         'avg_weighted_loss': avg_weighted_loss,
@@ -72,14 +73,15 @@ def val(model, val_loader, loss_f, device):
             output = model(observed_projection, expected_projection)
             weighted_loss, loc_loss, orient_loss = loss_f(output, target)
 
-            total_weighted_loss += weighted_loss.item()
-            total_loc_loss += loc_loss.item()
-            total_orient_loss += orient_loss.item()
+            batch_size = target.shape[0]
+            total_weighted_loss += weighted_loss.item() * batch_size
+            total_loc_loss += loc_loss.item() * batch_size
+            total_orient_loss += orient_loss.item() * batch_size
 
-    num_batches = len(val_loader)
-    avg_weighted_loss = total_weighted_loss / num_batches
-    avg_loc_loss = total_loc_loss / num_batches
-    avg_orient_loss = total_orient_loss / num_batches
+    dataset_length = len(val_loader.dataset)
+    avg_weighted_loss = total_weighted_loss / dataset_length
+    avg_loc_loss = total_loc_loss / dataset_length
+    avg_orient_loss = total_orient_loss / dataset_length
 
     metrics = {
         'avg_weighted_loss': avg_weighted_loss,
